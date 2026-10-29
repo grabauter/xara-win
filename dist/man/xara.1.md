@@ -11,16 +11,17 @@ xara - VARA-compatible HF/FM modem
 
 # SYNOPSIS
 
-**xara** [**--audio pulse**|**alsa**] **--call** *CALL* **--capture** *SOURCE* **--playback** *SINK*
+**xara** [**--audio pulse**|**alsa**|**wasapi**] **--call** *CALL* **--capture** *SOURCE* **--playback** *SINK*
 [*options*]\
-**xara** [**--audio pulse**|**alsa**] **--radio --ptt** *PTT* **--call** *CALL* **--capture** *SOURCE*
+**xara** [**--audio pulse**|**alsa**|**wasapi**] **--radio --ptt** *PTT* **--call** *CALL* **--capture** *SOURCE*
 **--playback** *SINK* [*options*]
 
 # DESCRIPTION
 
 **xara** is a modem compatible with VARA HF and VARA FM. It supports audio via
-ALSA and PipeWire/Pulse. It also exposes TCP ports for VARA's command and data
-along with KISS for applications such as Pat. See the README for full details.
+ALSA and PipeWire/Pulse on Linux and WASAPI on Windows. It also exposes TCP
+ports for VARA's command and data along with KISS for applications such as
+Pat. See the README for full details.
 
 # OPTIONS
 
@@ -32,19 +33,22 @@ along with KISS for applications such as Pat. See the README for full details.
     Repeated keys are treated the same way as repeated options.
 
     Without **--config**, xara reads *$XDG_CONFIG_HOME/xara/xara.conf* (by
-    default *~/.config/xara/xara.conf*) if it exists.
+    default *~/.config/xara/xara.conf*, on Windows *%APPDATA%/xara/xara.conf*)
+    if it exists.
 
-**--audio** pulse|alsa
+**--audio** pulse|alsa|wasapi
 
-:   Audio backend. Defaults to Pulse if compiled in, otherwise ALSA.
+:   Audio backend. Defaults to Pulse if compiled in, otherwise WASAPI on
+    Windows and ALSA elsewhere. On Windows *SOURCE* and *SINK* are audio
+    device names as shown by the web UI or Windows Sound settings.
 
 **--capture** *SOURCE*
 
-:   Pulse source or ALSA PCM to receive from (required).
+:   Pulse source, ALSA PCM or Windows audio input device to receive from (required).
 
 **--playback** *SINK*
 
-:   Pulse sink or ALSA PCM to transmit into (required). Without **--radio**, it must be
+:   Pulse sink, ALSA PCM or Windows audio output device to transmit into (required). Without **--radio**, it must be
     a Pulse null sink or the ALSA **null** PCM.
 
 **--call** *CALL*
@@ -128,7 +132,8 @@ along with KISS for applications such as Pat. See the README for full details.
 
 :   PTT method; requires **--radio**. One of **vox** **rts:***DEV* or
     **dtr:***DEV*, **cm108:***DEV[:GPIO]*, or
-    **rigctld**[**:***HOST***:***PORT*]. For full details see README.
+    **rigctld**[**:***HOST***:***PORT*]. On Windows *DEV* is a COM port
+    (e.g. **rts:COM3**) and **cm108** is not supported. For full details see README.
 
 **--ptt-lead-ms** *N*
 

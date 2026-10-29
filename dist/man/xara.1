@@ -6,19 +6,20 @@
 .SH NAME
 xara \- VARA\-compatible HF/FM modem
 .SH SYNOPSIS
-\f[B]xara\f[R] [\f[B]\-\-audio pulse\f[R]|\f[B]alsa\f[R]]
+\&\f[B]xara\f[R] [\f[B]\-\-audio pulse\f[R]|\f[B]alsa\f[R]|\f[B]wasapi\f[R]]
 \f[B]\-\-call\f[R] \f[I]CALL\f[R] \f[B]\-\-capture\f[R] \f[I]SOURCE\f[R]
 \f[B]\-\-playback\f[R] \f[I]SINK\f[R] [\f[I]options\f[R]]
 .PD 0
 .P
 .PD
-\f[B]xara\f[R] [\f[B]\-\-audio pulse\f[R]|\f[B]alsa\f[R]] \f[B]\-\-radio
-\-\-ptt\f[R] \f[I]PTT\f[R] \f[B]\-\-call\f[R] \f[I]CALL\f[R]
+\&\f[B]xara\f[R] [\f[B]\-\-audio pulse\f[R]|\f[B]alsa\f[R]|\f[B]wasapi\f[R]] \f[B]\-\-radio
+\f[B]\-\-ptt\f[R] \f[I]PTT\f[R] \f[B]\-\-call\f[R] \f[I]CALL\f[R]
 \f[B]\-\-capture\f[R] \f[I]SOURCE\f[R] \f[B]\-\-playback\f[R]
 \f[I]SINK\f[R] [\f[I]options\f[R]]
 .SH DESCRIPTION
-\f[B]xara\f[R] is a modem compatible with VARA HF and VARA FM.
-It supports audio via ALSA and PipeWire/Pulse.
+\&\f[B]xara\f[R] is a modem compatible with VARA HF and VARA FM.
+It supports audio via ALSA and PipeWire/Pulse on Linux and WASAPI on
+Windows.
 It also exposes TCP ports for VARA\(aqs command and data along with KISS
 for applications such as Pat.
 See the README for full details.
@@ -35,18 +36,25 @@ Repeated keys are treated the same way as repeated options.
 .PP
 Without \f[B]\-\-config\f[R], xara reads
 \f[I]$XDG_CONFIG_HOME/xara/xara.conf\f[R] (by default
-\f[I]\(ti/.config/xara/xara.conf\f[R]) if it exists.
+\f[I]\(ti/.config/xara/xara.conf\f[R], on Windows
+\f[I]%APPDATA%/xara/xara.conf\f[R]) if it
+exists.
 .RE
 .TP
-\f[B]\-\-audio\f[R] pulse|alsa
+\&\f[B]\-\-audio\f[R] pulse|alsa|wasapi
 Audio backend.
-Defaults to Pulse if compiled in, otherwise ALSA.
+Defaults to Pulse if compiled in, otherwise WASAPI on Windows and ALSA
+elsewhere.
+On Windows \f[I]SOURCE\f[R] and \f[I]SINK\f[R] are audio device names as
+shown by the web UI or Windows Sound settings.
 .TP
-\f[B]\-\-capture\f[R] \f[I]SOURCE\f[R]
-Pulse source or ALSA PCM to receive from (required).
+\&\f[B]\-\-capture\f[R] \f[I]SOURCE\f[R]
+Pulse source, ALSA PCM or Windows audio input device to receive from
+(required).
 .TP
-\f[B]\-\-playback\f[R] \f[I]SINK\f[R]
-Pulse sink or ALSA PCM to transmit into (required).
+\&\f[B]\-\-playback\f[R] \f[I]SINK\f[R]
+Pulse sink, ALSA PCM or Windows audio output device to transmit into
+(required).
 Without \f[B]\-\-radio\f[R], it must be a Pulse null sink or the ALSA
 \f[B]null\f[R] PCM.
 .TP
@@ -121,6 +129,8 @@ PTT method; requires \f[B]\-\-radio\f[R].
 One of \f[B]vox\f[R] \f[B]rts:\f[R]\f[I]DEV\f[R] or
 \f[B]dtr:\f[R]\f[I]DEV\f[R], \f[B]cm108:\f[R]\f[I]DEV[:GPIO]\f[R], or
 \f[B]rigctld\f[R][\f[B]:\f[R]\f[I]HOST\f[R]\f[B]:\f[R]\f[I]PORT\f[R]].
+On Windows \f[I]DEV\f[R] is a COM port (e.g.\ \f[B]rts:COM3\f[R]) and
+\f[B]cm108\f[R] is not supported.
 For full details see README.
 .TP
 \f[B]\-\-ptt\-lead\-ms\f[R] \f[I]N\f[R]

@@ -21,6 +21,18 @@ jobs:
       - run: cargo +stable clippy --locked --workspace --all-targets -- -D warnings
       - run: cargo +stable test --locked --release --workspace
       - run: cargo +stable build --locked --release -p xara --no-default-features --features alsa
+      - run: cargo +stable build --locked --release -p xara --no-default-features --features wasapi
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt,clippy
+      - run: cargo +stable fmt --all --check
+      - run: cargo +stable clippy --locked --workspace --all-targets --no-default-features --features wasapi -- -D warnings
+      - run: cargo +stable test --locked --release --workspace --no-default-features --features wasapi
 
   msrv:
     runs-on: ubuntu-24.04

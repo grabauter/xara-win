@@ -8,7 +8,7 @@ xara\-monitor \- passive VARA HF traffic monitor
 .SH SYNOPSIS
 \f[B]xara\-monitor\f[R] (\f[B]\-\-wav\f[R] \f[I]FILE\f[R] |
 \f[B]\-\-stdin\f[R] \f[I]RATE\f[R] | [\f[B]\-\-audio
-pulse\f[R]|\f[B]alsa\f[R]] \f[B]\-\-capture\f[R] \f[I]SOURCE\f[R])
+pulse\f[R]|\f[B]alsa\f[R]|\f[B]wasapi\f[R]] \f[B]\-\-capture\f[R] \f[I]SOURCE\f[R])
 [\f[I]options\f[R]]
 .SH DESCRIPTION
 \f[B]xara\-monitor\f[R] decodes VARA HF sessions between other stations
@@ -21,12 +21,13 @@ PCM 8/16/24/32\-bit or float WAV at any rate
 \f[B]\-\-stdin\f[R] \f[I]RATE\f[R]
 s16le mono at \f[I]RATE\f[R] Hz (1000\-1000000) on stdin
 .TP
-\f[B]\-\-audio\f[R] pulse|alsa
-Backend for \f[B]\-\-capture\f[R] (default pulse, alsa when pulse is not
-present)
+\f[B]\-\-audio\f[R] pulse|alsa|wasapi
+Backend for \f[B]\-\-capture\f[R] (default pulse, wasapi on Windows
+builds, alsa when pulse is not present)
 .TP
-\f[B]\-\-capture\f[R] \f[I]SOURCE\f[R]
-Pulse source or ALSA PCM, opened capture\-only.
+\&\f[B]\-\-capture\f[R] \f[I]SOURCE\f[R]
+Pulse source, ALSA PCM or Windows audio input device, opened
+capture\-only.
 .TP
 \f[B]\-\-hf\f[R] 500|2300|2750
 HF bandwidth (default: 2300)

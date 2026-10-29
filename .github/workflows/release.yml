@@ -55,6 +55,23 @@ jobs:
           path: target/dist/*.tar.xz
           if-no-files-found: error
 
+  windows:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        target: [x86_64-pc-windows-msvc]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - run: pwsh scripts/release_bins_win.ps1 -Target '${{ matrix.target }}'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bins-${{ matrix.target }}
+          path: target/dist/*.zip
+          if-no-files-found: error
+
   source:
     runs-on: ubuntu-24.04
     steps:
@@ -72,7 +89,7 @@ jobs:
           if-no-files-found: error
 
   release:
-    needs: [bins, source]
+    needs: [bins, windows, source]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -84,10 +101,10 @@ jobs:
         with:
           path: out
           merge-multiple: true
-      - run: cd out && sha256sum -- *.tar.xz > SHA256SUMS
+      - run: cd out && sha256sum -- * > SHA256SUMS
       - uses: actions/attest-build-provenance@v2
         with:
-          subject-path: out/*.tar.xz
+          subject-path: out/*
       - name: draft release
         env:
           GH_TOKEN: ${{ github.token }}

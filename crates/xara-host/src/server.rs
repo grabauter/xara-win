@@ -127,12 +127,12 @@ impl Drop for Host {
 
 fn set_reuse(l: &TcpListener, on: bool) -> io::Result<()> {
     let s = socket2::Socket::from(l.try_clone()?);
-    s.set_reuse_address(on).map_err(io::Error::from)
+    s.set_reuse_address(on)
 }
 
 fn pause(l: &TcpListener) -> io::Result<()> {
     let s = socket2::Socket::from(l.try_clone()?);
-    s.shutdown(std::net::Shutdown::Read).map_err(io::Error::from)?;
+    s.shutdown(std::net::Shutdown::Read)?;
     set_reuse(l, false)
 }
 
@@ -141,7 +141,7 @@ fn resume(l: &TcpListener) -> io::Result<()> {
     let s = socket2::Socket::from(l.try_clone()?);
     if let Err(e) = s.listen(128) {
         let _ = set_reuse(l, false);
-        return Err(io::Error::from(e));
+        return Err(e);
     }
     Ok(())
 }

@@ -12,7 +12,7 @@ xara-monitor - passive VARA HF traffic monitor
 # SYNOPSIS
 
 **xara-monitor** (**--wav** *FILE* | **--stdin** *RATE* | [**--audio
-pulse**|**alsa**] **--capture** *SOURCE*) [*options*]
+pulse**|**alsa**|**wasapi**] **--capture** *SOURCE*) [*options*]
 
 # DESCRIPTION
 
@@ -29,13 +29,13 @@ timestamped details about the observed packets.
 
 :   s16le mono at *RATE* Hz (1000-1000000) on stdin
 
-**--audio** pulse|alsa
+**--audio** pulse|alsa|wasapi
 
-:   Backend for **--capture** (default pulse, alsa when pulse is not present)
+:   Backend for **--capture** (default pulse, wasapi on Windows builds, alsa when pulse is not present)
 
 **--capture** *SOURCE*
 
-:   Pulse source or ALSA PCM, opened capture-only.
+:   Pulse source, ALSA PCM or Windows audio input device, opened capture-only.
 
 **--hf** 500|2300|2750
 

@@ -1,6 +1,7 @@
 # xara
 
-a VARA-compatible modem for linux. tested against VARA HF 4.9.0 and FM 4.4.0.
+a VARA-compatible modem for linux and windows. tested against VARA HF 4.9.0
+and FM 4.4.0.
 
 ## minimum config
 
@@ -35,13 +36,21 @@ alternatively for a local setup you can do:
     cargo build --release
     cargo test
 
+on windows, build the wasapi backend instead (needs no extra libraries):
+
+    cargo build --release --no-default-features --features wasapi
+
+windows audio devices are named as Windows names them: find the exact name
+in the web UI's audio settings or Windows Sound settings.
+
 ## options
 
     --config FILE           read key = value options from FILE
 
     --call CALL             your callsign (required)
 
-    --audio pulse|alsa      pulse vs alsa audio path
+    --audio pulse|alsa|wasapi
+                            audio backend (wasapi is the windows one)
     --capture SOURCE        audio source
     --playback SINK         audio sink
 
@@ -98,6 +107,9 @@ summary of settings:
     --ptt-tail-ms N             PTT held for N ms after xmit (default: 100)
     --ptt-max-s N               release PTT after N sec max (1-120, default: 30)
 
+on windows DEV is a COM port (e.g. `--ptt rts:COM3`) and the cm108 hidraw
+method is not supported; vox and rigctld work everywhere.
+
 ## xara-monitor
 
 `xara-monitor` listens to VARA HF traffic between other stations and never
@@ -111,7 +123,8 @@ options:
     --wav FILE              load from a wav file
     --stdin RATE            s16le mono at RATE Hz
 
-    --audio pulse|alsa      pulse or alsa audio path
+    --audio pulse|alsa|wasapi
+                            audio backend (wasapi is the windows one)
     --capture SOURCE        audio source
 
     --hf 500|2300|2750      HF bandwidth (default 2300)

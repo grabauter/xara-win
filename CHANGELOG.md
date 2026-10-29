@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+windows support
+
+- xara and xara-monitor build and run on Windows (x86_64 MSVC)
+- WASAPI audio backend (`--audio wasapi`); devices are Windows device names
+- PTT on Windows: RTS/DTR on COM ports and rigctld (CM108 hidraw stays Linux-only)
+- Ctrl+C and console close stop xara cleanly and release PTT, like SIGINT on Linux
+
 ## 0.1.1
 
 recording feature and bugfixes
