@@ -10,7 +10,7 @@ repository.workspace = true
 description = "VARA-compatible command, data and KISS TCP host ports for the xara modem."
 
 [dependencies]
-libc.workspace = true
+socket2.workspace = true
 
 [dev-dependencies]
 xara-testkit.workspace = true

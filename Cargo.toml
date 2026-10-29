@@ -22,6 +22,8 @@ rustfft = "6.4"
 miniz_oxide = "0.8"
 libc = "0.2"
 alsa-sys = "0.3.1"
+cpal = "0.15"
+socket2 = "0.6"
 
 [profile.test]
 opt-level = 2

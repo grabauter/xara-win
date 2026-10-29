@@ -409,6 +409,7 @@ fn streams_and_viewers_cannot_take_the_control_slot() {
     drop((streams, viewers));
 }
 
+#[cfg(unix)] // asserts POSIX token modes, which Windows has no equivalent of
 #[test]
 fn stored_token_is_private_and_stable() {
     use std::os::unix::fs::PermissionsExt;

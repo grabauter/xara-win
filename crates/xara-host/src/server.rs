@@ -2,7 +2,6 @@ use crate::command::{Command, parse};
 use crate::writer::Writer;
 use std::io::{self, Read};
 use std::net::{SocketAddr, TcpListener, TcpStream};
-use std::os::fd::AsRawFd;
 use std::sync::mpsc::{Receiver, SyncSender, sync_channel};
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
@@ -127,29 +126,22 @@ impl Drop for Host {
 }
 
 fn set_reuse(l: &TcpListener, on: bool) -> io::Result<()> {
-    let v: libc::c_int = on.into();
-    let len = std::mem::size_of_val(&v) as libc::socklen_t;
-    let r =
-        unsafe { libc::setsockopt(l.as_raw_fd(), libc::SOL_SOCKET, libc::SO_REUSEADDR, (&raw const v).cast(), len) };
-    if r != 0 {
-        return Err(io::Error::last_os_error());
-    }
-    Ok(())
+    let s = socket2::Socket::from(l.try_clone()?);
+    s.set_reuse_address(on).map_err(io::Error::from)
 }
 
 fn pause(l: &TcpListener) -> io::Result<()> {
-    if unsafe { libc::shutdown(l.as_raw_fd(), libc::SHUT_RD) } != 0 {
-        return Err(io::Error::last_os_error());
-    }
+    let s = socket2::Socket::from(l.try_clone()?);
+    s.shutdown(std::net::Shutdown::Read).map_err(io::Error::from)?;
     set_reuse(l, false)
 }
 
 fn resume(l: &TcpListener) -> io::Result<()> {
     set_reuse(l, true)?;
-    if unsafe { libc::listen(l.as_raw_fd(), 128) } != 0 {
-        let e = io::Error::last_os_error();
+    let s = socket2::Socket::from(l.try_clone()?);
+    if let Err(e) = s.listen(128) {
         let _ = set_reuse(l, false);
-        return Err(e);
+        return Err(io::Error::from(e));
     }
     Ok(())
 }

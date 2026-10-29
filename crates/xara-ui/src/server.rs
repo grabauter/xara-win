@@ -235,12 +235,15 @@ pub fn valid_token(t: &str) -> bool {
 }
 
 pub fn stored_token(dir: &Path) -> io::Result<String> {
-    use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
     let path = dir.join(TOKEN_FILE);
     match std::fs::read_to_string(&path) {
         Ok(t) if valid_token(t.trim()) => {
-            if std::fs::metadata(&path)?.permissions().mode() & 0o077 != 0 {
-                std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                if std::fs::metadata(&path)?.permissions().mode() & 0o077 != 0 {
+                    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))?;
+                }
             }
             return Ok(t.trim().to_string());
         }
@@ -253,7 +256,14 @@ pub fn stored_token(dir: &Path) -> io::Result<String> {
         Err(e) if e.kind() != io::ErrorKind::NotFound => return Err(e),
         _ => {}
     }
-    let mut f = std::fs::OpenOptions::new().write(true).create_new(true).mode(0o600).open(&tmp)?;
+    let mut opts = std::fs::OpenOptions::new();
+    opts.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        opts.mode(0o600);
+    }
+    let mut f = opts.open(&tmp)?;
     writeln!(f, "{t}")?;
     f.sync_all()?;
     std::fs::rename(&tmp, &path)?;
