@@ -5,22 +5,36 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 use xara::audio::TxAudio;
-use xara::ptt::{Cm108, Event, Ptt, PttCtl, PttSpec, PttTiming, Rigctld, Serial, cm108_report};
+#[cfg(unix)]
+use xara::ptt::{Cm108, Serial, cm108_report};
+use xara::ptt::{Event, Ptt, PttCtl, PttSpec, PttTiming, Rigctld};
 
 #[test]
 fn ptt_spec_parse() {
     assert_eq!(PttSpec::parse("vox"), Ok(PttSpec::Vox));
-    assert_eq!(PttSpec::parse("rts:/dev/ttyACM0"), Ok(PttSpec::Rts("/dev/ttyACM0".into())));
-    assert_eq!(PttSpec::parse("dtr:/dev/ttyUSB1"), Ok(PttSpec::Dtr("/dev/ttyUSB1".into())));
-    assert_eq!(PttSpec::parse("cm108:/dev/hidraw2"), Ok(PttSpec::Cm108 { path: "/dev/hidraw2".into(), gpio: 3 }));
-    assert_eq!(PttSpec::parse("cm108:/dev/hidraw2:4"), Ok(PttSpec::Cm108 { path: "/dev/hidraw2".into(), gpio: 4 }));
     assert_eq!(PttSpec::parse("rigctld"), Ok(PttSpec::Rigctld("127.0.0.1:4532".into())));
     assert_eq!(PttSpec::parse("rigctld:radio.lan:4533"), Ok(PttSpec::Rigctld("radio.lan:4533".into())));
-    for bad in ["", "rts", "rts:ttyACM0", "cm108:/dev/hidraw0:9", "cm108:/dev/hidraw0:0", "vox:x", "gpio:4"] {
-        assert!(PttSpec::parse(bad).is_err(), "{bad}");
+    #[cfg(not(windows))]
+    {
+        assert_eq!(PttSpec::parse("rts:/dev/ttyACM0"), Ok(PttSpec::Rts("/dev/ttyACM0".into())));
+        assert_eq!(PttSpec::parse("dtr:/dev/ttyUSB1"), Ok(PttSpec::Dtr("/dev/ttyUSB1".into())));
+        assert_eq!(PttSpec::parse("cm108:/dev/hidraw2"), Ok(PttSpec::Cm108 { path: "/dev/hidraw2".into(), gpio: 3 }));
+        assert_eq!(PttSpec::parse("cm108:/dev/hidraw2:4"), Ok(PttSpec::Cm108 { path: "/dev/hidraw2".into(), gpio: 4 }));
+        for bad in ["", "rts", "rts:ttyACM0", "cm108:/dev/hidraw0:9", "cm108:/dev/hidraw0:0", "vox:x", "gpio:4"] {
+            assert!(PttSpec::parse(bad).is_err(), "{bad}");
+        }
+    }
+    #[cfg(windows)]
+    {
+        assert_eq!(PttSpec::parse("rts:COM1"), Ok(PttSpec::Rts("COM1".into())));
+        assert_eq!(PttSpec::parse("dtr:COM3"), Ok(PttSpec::Dtr("COM3".into())));
+        for bad in ["", "rts", "cm108:whatever:3", "vox:x", "gpio:4"] {
+            assert!(PttSpec::parse(bad).is_err(), "{bad}");
+        }
     }
 }
 
+#[cfg(unix)] // hidraw-based; the Windows stub refuses to open by design
 #[test]
 fn cm108_reports() {
     assert_eq!(cm108_report(3, true), [0, 0, 4, 4, 0]);
@@ -33,8 +47,10 @@ fn cm108_reports() {
     assert_eq!(std::fs::read(&f.0).unwrap(), [[0, 0, 0, 4, 0], [0, 0, 4, 4, 0], [0, 0, 0, 4, 0]].concat());
 }
 
+#[cfg(unix)]
 struct Scratch(std::path::PathBuf);
 
+#[cfg(unix)]
 impl Scratch {
     fn new(name: &str) -> Self {
         let p = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!("ptt-{name}-{}", std::process::id()));
@@ -47,12 +63,14 @@ impl Scratch {
     }
 }
 
+#[cfg(unix)]
 impl Drop for Scratch {
     fn drop(&mut self) {
         let _ = std::fs::remove_file(&self.0);
     }
 }
 
+#[cfg(unix)] // uses openpty and tty ioctls; the Windows COM path is verified on real hardware
 #[test]
 fn serial_refuses_non_serial_devices() {
     assert!(Serial::open("/dev/null", libc::TIOCM_RTS).is_err());
@@ -645,6 +663,7 @@ fn rigctld_reconnects_after_a_partial_reply() {
     assert_eq!(*log.lock().unwrap(), ["0:T 0", "0:T 1", "1:T 0"]);
 }
 
+#[cfg(unix)]
 #[test]
 fn is_hidraw_accepts_only_hidraw_char_devices() {
     assert!(!xara::ptt::is_hidraw("/dev/null"));

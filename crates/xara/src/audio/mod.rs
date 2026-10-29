@@ -4,13 +4,15 @@ pub mod alsa;
 pub mod pulse;
 #[cfg(feature = "pulse")]
 mod pulse_ffi;
+#[cfg(feature = "wasapi")]
+pub mod wasapi;
 
-#[cfg(not(any(feature = "pulse", feature = "alsa")))]
-compile_error!("xara needs an audio backend: enable the pulse or alsa feature");
+#[cfg(not(any(feature = "pulse", feature = "alsa", feature = "wasapi")))]
+compile_error!("xara needs an audio backend: enable the pulse, alsa, or wasapi feature");
 
 use std::collections::VecDeque;
 use std::io;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 pub const RATE: u32 = 48000;
 pub const BLOCK: usize = 480;
@@ -22,9 +24,10 @@ fn capture_only() -> io::Error {
     io::Error::new(io::ErrorKind::Unsupported, "write to a capture-only audio device")
 }
 
-fn remaining(until: Instant, what: &str) -> io::Result<Duration> {
+#[cfg(any(feature = "pulse", feature = "alsa"))]
+fn remaining(until: std::time::Instant, what: &str) -> io::Result<Duration> {
     until
-        .checked_duration_since(Instant::now())
+        .checked_duration_since(std::time::Instant::now())
         .filter(|d| !d.is_zero())
         .ok_or_else(|| io::Error::new(io::ErrorKind::TimedOut, format!("{what}: timed out")))
 }
@@ -69,11 +72,18 @@ impl TxAudio {
 pub enum Backend {
     Pulse,
     Alsa,
+    Wasapi,
 }
 
 impl Default for Backend {
     fn default() -> Self {
-        if cfg!(feature = "pulse") { Self::Pulse } else { Self::Alsa }
+        if cfg!(feature = "pulse") {
+            Self::Pulse
+        } else if cfg!(feature = "wasapi") {
+            Self::Wasapi
+        } else {
+            Self::Alsa
+        }
     }
 }
 
@@ -84,7 +94,8 @@ impl std::str::FromStr for Backend {
         let b = match s {
             "pulse" => Self::Pulse,
             "alsa" => Self::Alsa,
-            _ => return Err(format!("--audio {s:?}: expected pulse or alsa")),
+            "wasapi" => Self::Wasapi,
+            _ => return Err(format!("--audio {s:?}: expected pulse, alsa or wasapi")),
         };
         if b.built() { Ok(b) } else { Err(format!("--audio {s}: this xara was built without the {s} feature")) }
     }
@@ -95,6 +106,7 @@ impl Backend {
         match self {
             Self::Pulse => cfg!(feature = "pulse"),
             Self::Alsa => cfg!(feature = "alsa"),
+            Self::Wasapi => cfg!(feature = "wasapi"),
         }
     }
 
@@ -102,11 +114,12 @@ impl Backend {
         match self {
             Self::Pulse => "pulse",
             Self::Alsa => "alsa",
+            Self::Wasapi => "wasapi",
         }
     }
 }
 
-#[cfg(not(all(feature = "pulse", feature = "alsa")))]
+#[cfg(not(all(feature = "pulse", feature = "alsa", feature = "wasapi")))]
 fn unbuilt(b: Backend) -> io::Error {
     io::Error::other(format!("this xara was built without the {} feature", b.name()))
 }
@@ -117,7 +130,9 @@ pub fn open(b: Backend, capture: &str, playback: &str, radio: bool) -> io::Resul
         Backend::Pulse => Ok(Box::new(pulse::PulseIo::open(capture, playback, radio)?)),
         #[cfg(feature = "alsa")]
         Backend::Alsa => Ok(Box::new(alsa::AlsaIo::open(capture, playback, radio)?)),
-        #[cfg(not(all(feature = "pulse", feature = "alsa")))]
+        #[cfg(feature = "wasapi")]
+        Backend::Wasapi => Ok(Box::new(wasapi::WasapiIo::open(capture, playback, radio)?)),
+        #[cfg(not(all(feature = "pulse", feature = "alsa", feature = "wasapi")))]
         _ => Err(unbuilt(b)),
     }
 }
@@ -128,7 +143,9 @@ pub fn check_playback(b: Backend, playback: &str, radio: bool) -> io::Result<()>
         Backend::Pulse => pulse::check(playback, radio),
         #[cfg(feature = "alsa")]
         Backend::Alsa => alsa::resolve_playback(playback, radio).map(drop),
-        #[cfg(not(all(feature = "pulse", feature = "alsa")))]
+        #[cfg(feature = "wasapi")]
+        Backend::Wasapi => wasapi::check(playback, radio),
+        #[cfg(not(all(feature = "pulse", feature = "alsa", feature = "wasapi")))]
         _ => Err(unbuilt(b)),
     }
 }
@@ -139,7 +156,9 @@ pub fn list(b: Backend) -> io::Result<(DeviceList, DeviceList)> {
         Backend::Pulse => pulse::list(),
         #[cfg(feature = "alsa")]
         Backend::Alsa => alsa::list(),
-        #[cfg(not(all(feature = "pulse", feature = "alsa")))]
+        #[cfg(feature = "wasapi")]
+        Backend::Wasapi => wasapi::list(),
+        #[cfg(not(all(feature = "pulse", feature = "alsa", feature = "wasapi")))]
         _ => Err(unbuilt(b)),
     }
 }
@@ -150,7 +169,9 @@ pub fn open_capture(b: Backend, capture: &str) -> io::Result<Box<dyn Audio>> {
         Backend::Pulse => Ok(Box::new(pulse::PulseIo::open_capture(capture)?)),
         #[cfg(feature = "alsa")]
         Backend::Alsa => Ok(Box::new(alsa::AlsaIo::open_capture(capture)?)),
-        #[cfg(not(all(feature = "pulse", feature = "alsa")))]
+        #[cfg(feature = "wasapi")]
+        Backend::Wasapi => Ok(Box::new(wasapi::WasapiIo::open_capture(capture)?)),
+        #[cfg(not(all(feature = "pulse", feature = "alsa", feature = "wasapi")))]
         _ => Err(unbuilt(b)),
     }
 }

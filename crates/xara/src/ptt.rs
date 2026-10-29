@@ -1,9 +1,6 @@
 use std::cell::Cell;
-use std::fs::{File, OpenOptions};
-use std::io::{self, BufRead, BufReader, IsTerminal, Write};
+use std::io::{self, BufRead, BufReader, Write};
 use std::net::{TcpStream, ToSocketAddrs};
-use std::os::fd::AsRawFd;
-use std::os::unix::fs::OpenOptionsExt;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{self, RecvTimeoutError, Sender};
 use std::sync::{Arc, Condvar, Mutex, Once, PoisonError};
@@ -30,25 +27,34 @@ impl PttSpec {
     pub fn parse(s: &str) -> Result<Self, String> {
         let (kind, rest) = s.split_once(':').unwrap_or((s, ""));
         let path = |what: &str| {
-            if rest.starts_with('/') {
-                Ok(rest.to_string())
-            } else {
-                Err(format!("--ptt {what}: needs a device path, e.g. {what}:/dev/ttyACM0"))
+            #[cfg(not(windows))]
+            if !rest.starts_with('/') {
+                return Err(format!("--ptt {what}: needs a device path, e.g. {what}:/dev/ttyACM0"));
             }
+            #[cfg(windows)]
+            if rest.is_empty() {
+                return Err(format!("--ptt {what}: needs a COM port, e.g. {what}:COM1"));
+            }
+            Ok(rest.to_string())
         };
         match kind {
             "vox" if rest.is_empty() => Ok(Self::Vox),
             "rts" => path("rts").map(Self::Rts),
             "dtr" => path("dtr").map(Self::Dtr),
             "cm108" => {
-                let (p, g) = match rest.rsplit_once(':') {
-                    Some((p, g)) => (p, g.parse::<u8>().map_err(|e| format!("--ptt cm108 gpio: {e}"))?),
-                    None => (rest, 3),
-                };
-                if !p.starts_with('/') || !(1..=8).contains(&g) {
-                    return Err("--ptt cm108:/dev/hidrawN[:GPIO 1-8]".into());
+                #[cfg(windows)]
+                return Err("--ptt cm108: CM108/CM119 HID PTT needs hidraw and is not supported on Windows; use rts:COMx, dtr:COMx or rigctld".into());
+                #[cfg(not(windows))]
+                {
+                    let (p, g) = match rest.rsplit_once(':') {
+                        Some((p, g)) => (p, g.parse::<u8>().map_err(|e| format!("--ptt cm108 gpio: {e}"))?),
+                        None => (rest, 3),
+                    };
+                    if !p.starts_with('/') || !(1..=8).contains(&g) {
+                        return Err("--ptt cm108:/dev/hidrawN[:GPIO 1-8]".into());
+                    }
+                    Ok(Self::Cm108 { path: p.into(), gpio: g })
                 }
-                Ok(Self::Cm108 { path: p.into(), gpio: g })
             }
             "rigctld" => Ok(Self::Rigctld(if rest.is_empty() { RIGCTLD_DEFAULT.into() } else { rest.into() })),
             _ => Err(format!("--ptt {s:?}: expected vox, rts:DEV, dtr:DEV, cm108:DEV[:GPIO] or rigctld[:HOST:PORT]")),
@@ -58,8 +64,8 @@ impl PttSpec {
     pub fn open(&self) -> io::Result<Box<dyn Ptt>> {
         Ok(match self {
             Self::Vox => Box::new(Vox),
-            Self::Rts(p) => Box::new(Serial::open(p, libc::TIOCM_RTS)?),
-            Self::Dtr(p) => Box::new(Serial::open(p, libc::TIOCM_DTR)?),
+            Self::Rts(p) => Box::new(Serial::open(p, Serial::LINE_RTS)?),
+            Self::Dtr(p) => Box::new(Serial::open(p, Serial::LINE_DTR)?),
             Self::Cm108 { path, gpio } => Box::new(Cm108::open(path, *gpio)?),
             Self::Rigctld(a) => Box::new(Rigctld::open(a)?),
         })
@@ -78,15 +84,26 @@ impl Ptt for Vox {
     }
 }
 
+#[cfg(unix)]
 pub struct Serial {
-    f: File,
+    f: std::fs::File,
     path: String,
     line: libc::c_int,
 }
 
+#[cfg(unix)]
 impl Serial {
+    const LINE_RTS: libc::c_int = libc::TIOCM_RTS;
+    const LINE_DTR: libc::c_int = libc::TIOCM_DTR;
+
     pub fn open(path: &str, line: libc::c_int) -> io::Result<Self> {
-        let f = OpenOptions::new().read(true).write(true).custom_flags(libc::O_NOCTTY | libc::O_NONBLOCK).open(path)?;
+        use std::io::IsTerminal;
+        use std::os::unix::fs::OpenOptionsExt;
+        let f = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .custom_flags(libc::O_NOCTTY | libc::O_NONBLOCK)
+            .open(path)?;
         if !f.is_terminal() {
             return Err(io::Error::other(format!("{path} is not a serial port")));
         }
@@ -96,6 +113,7 @@ impl Serial {
     }
 
     fn modem(&self, req: libc::Ioctl, bits: libc::c_int) -> io::Result<()> {
+        use std::os::fd::AsRawFd;
         if unsafe { libc::ioctl(self.f.as_raw_fd(), req, &bits) } != 0 {
             return Err(io::Error::last_os_error());
         }
@@ -103,6 +121,7 @@ impl Serial {
     }
 
     fn lines(&self) -> io::Result<libc::c_int> {
+        use std::os::fd::AsRawFd;
         let mut bits: libc::c_int = 0;
         if unsafe { libc::ioctl(self.f.as_raw_fd(), libc::TIOCMGET, &mut bits) } != 0 {
             return Err(io::Error::last_os_error());
@@ -111,6 +130,7 @@ impl Serial {
     }
 }
 
+#[cfg(unix)]
 impl Ptt for Serial {
     fn set(&mut self, on: bool) -> io::Result<()> {
         self.modem(if on { libc::TIOCMBIS } else { libc::TIOCMBIC }, self.line)?;
@@ -125,8 +145,130 @@ impl Ptt for Serial {
     }
 }
 
+#[cfg(windows)]
+mod win32 {
+    // PTT line control on COM ports; signatures from the Windows API, called only by Serial.
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        pub fn CreateFileW(
+            name: *const u16,
+            access: u32,
+            share: u32,
+            sa: *mut u8,
+            disp: u32,
+            flags: u32,
+            tmpl: isize,
+        ) -> isize;
+        pub fn EscapeCommFunction(h: isize, verb: u32) -> i32;
+        pub fn GetCommModemStatus(h: isize, status: *mut u32) -> i32;
+        pub fn CloseHandle(h: isize) -> i32;
+    }
+}
+
+#[cfg(windows)]
+pub struct Serial {
+    h: isize,
+    path: String,
+    set_on: u32,  // EscapeCommFunction verb that asserts our line
+    set_off: u32, // EscapeCommFunction verb that clears our line
+    status: u32,  // GetCommModemStatus bit mirroring our line
+}
+
+#[cfg(windows)]
+impl Serial {
+    // Line tag for open(): which modem line keys the radio.
+    const LINE_RTS: u8 = 0;
+    const LINE_DTR: u8 = 1;
+
+    const SETRTS: u32 = 0x0100;
+    const CLRRTS: u32 = 0x0200;
+    const SETDTR: u32 = 0x0010;
+    const CLRDTR: u32 = 0x0020;
+    const MS_RTS_ON: u32 = 0x0010;
+    const MS_DTR_ON: u32 = 0x0020;
+    const GENERIC_READ: u32 = 0x8000_0000;
+    const GENERIC_WRITE: u32 = 0x4000_0000;
+    const OPEN_EXISTING: u32 = 3;
+    const INVALID_HANDLE_VALUE: isize = -1;
+
+    pub fn open(path: &str, line: u8) -> io::Result<Self> {
+        use std::os::windows::ffi::OsStrExt;
+        let (set_on, set_off, status) = match line {
+            Self::LINE_RTS => (Self::SETRTS, Self::CLRRTS, Self::MS_RTS_ON),
+            Self::LINE_DTR => (Self::SETDTR, Self::CLRDTR, Self::MS_DTR_ON),
+            _ => return Err(io::Error::other("internal: bad modem line")),
+        };
+        let mut wide: Vec<u16> = std::ffi::OsStr::new(path).encode_wide().chain(std::iter::once(0)).collect();
+        // SAFETY: wide is a NUL-terminated wide buffer we own; the other arguments are plain
+        // constants. CreateFileW returns INVALID_HANDLE_VALUE on failure, never a borrow.
+        let h = unsafe {
+            win32::CreateFileW(
+                wide.as_mut_ptr(),
+                Self::GENERIC_READ | Self::GENERIC_WRITE,
+                0,
+                std::ptr::null_mut(),
+                Self::OPEN_EXISTING,
+                0,
+                Self::INVALID_HANDLE_VALUE,
+            )
+        };
+        if h == Self::INVALID_HANDLE_VALUE {
+            return Err(io::Error::other(format!("{}: cannot open COM port (does it exist?)", path)));
+        }
+        let s = Self { h, path: path.into(), set_on, set_off, status };
+        // Key up only on our line: hold both low first, like the Unix path does.
+        // SAFETY: h is an open handle owned by s.
+        unsafe {
+            win32::EscapeCommFunction(h, Self::CLRRTS);
+            win32::EscapeCommFunction(h, Self::CLRDTR);
+        }
+        Ok(s)
+    }
+
+    fn write_line(&self, on: bool) -> io::Result<()> {
+        // SAFETY: h is an open COM handle owned by self.
+        if unsafe { win32::EscapeCommFunction(self.h, if on { self.set_on } else { self.set_off }) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(())
+    }
+
+    fn lines(&self) -> io::Result<u32> {
+        let mut status = 0u32;
+        // SAFETY: status is plain storage written by the callee; h is owned by self.
+        if unsafe { win32::GetCommModemStatus(self.h, &mut status) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(status)
+    }
+}
+
+#[cfg(windows)]
+impl Ptt for Serial {
+    fn set(&mut self, on: bool) -> io::Result<()> {
+        self.write_line(on)?;
+        if (self.lines()? & self.status != 0) != on {
+            return Err(io::Error::other(format!("{}: modem line did not follow", self.path)));
+        }
+        Ok(())
+    }
+
+    fn describe(&self) -> String {
+        format!("{} on {} (other line held low)", if self.status == Self::MS_RTS_ON { "RTS" } else { "DTR" }, self.path)
+    }
+}
+
+#[cfg(windows)]
+impl Drop for Serial {
+    fn drop(&mut self) {
+        // SAFETY: h was validated in open and is closed exactly once here.
+        unsafe { win32::CloseHandle(self.h) };
+    }
+}
+
+#[cfg(unix)]
 pub struct Cm108 {
-    f: File,
+    f: std::fs::File,
     path: String,
     gpio: u8,
 }
@@ -136,6 +278,7 @@ pub fn cm108_report(gpio: u8, on: bool) -> [u8; 5] {
     [0, 0, if on { m } else { 0 }, m, 0]
 }
 
+#[cfg(unix)]
 pub fn is_hidraw(path: &str) -> bool {
     use std::os::unix::fs::{FileTypeExt, MetadataExt};
     let Ok(m) = std::fs::metadata(path) else { return false };
@@ -147,9 +290,10 @@ pub fn is_hidraw(path: &str) -> bool {
         .is_ok_and(|l| l.file_name().is_some_and(|n| n == "hidraw"))
 }
 
+#[cfg(unix)]
 impl Cm108 {
     pub fn open(path: &str, gpio: u8) -> io::Result<Self> {
-        let f = OpenOptions::new().write(true).open(path)?;
+        let f = std::fs::OpenOptions::new().write(true).open(path)?;
         if !is_hidraw(path) {
             say!("warning: {path} is not a hidraw device; CM108 PTT may not work");
         }
@@ -159,6 +303,7 @@ impl Cm108 {
     }
 }
 
+#[cfg(unix)]
 impl Ptt for Cm108 {
     fn set(&mut self, on: bool) -> io::Result<()> {
         self.f.write_all(&cm108_report(self.gpio, on))
@@ -166,6 +311,31 @@ impl Ptt for Cm108 {
 
     fn describe(&self) -> String {
         format!("CM108 GPIO{} on {}", self.gpio, self.path)
+    }
+}
+
+// hidraw is a Linux interface; PttSpec::parse already refuses cm108 on Windows, and this
+// stub keeps PttSpec::open's match exhaustive with a clear error in case of a future gap.
+#[cfg(windows)]
+pub struct Cm108 {
+    _private: (),
+}
+
+#[cfg(windows)]
+impl Cm108 {
+    pub fn open(_: &str, _: u8) -> io::Result<Self> {
+        Err(io::Error::other("CM108/CM119 HID PTT is not supported on Windows; use rts:COMx, dtr:COMx or rigctld"))
+    }
+}
+
+#[cfg(windows)]
+impl Ptt for Cm108 {
+    fn set(&mut self, _: bool) -> io::Result<()> {
+        unreachable!("open always fails on Windows")
+    }
+
+    fn describe(&self) -> String {
+        "CM108 (unsupported on Windows)".into()
     }
 }
 

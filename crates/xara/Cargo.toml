@@ -7,7 +7,7 @@ publish.workspace = true
 license.workspace = true
 readme = "README.md"
 repository.workspace = true
-description = "A VARA-compatible HF/FM modem for Linux with PipeWire/PulseAudio audio I/O and a passive monitor."
+description = "A VARA-compatible HF/FM modem for Linux and Windows with PipeWire/PulseAudio/ALSA/WASAPI audio I/O and a passive monitor."
 
 [dependencies]
 xara-phy.workspace = true
@@ -16,6 +16,7 @@ xara-host.workspace = true
 xara-ui.workspace = true
 libc.workspace = true
 alsa-sys = { workspace = true, optional = true }
+cpal = { workspace = true, optional = true }
 
 [dev-dependencies]
 xara-testkit.workspace = true
@@ -24,6 +25,7 @@ xara-testkit.workspace = true
 default = ["pulse", "alsa"]
 pulse = []
 alsa = ["dep:alsa-sys"]
+wasapi = ["dep:cpal"]
 registered = []
 fixed-turbo = ["xara-phy/fixed-turbo"]
 float-turbo = ["xara-phy/float-turbo"]

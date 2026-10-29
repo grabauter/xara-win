@@ -147,15 +147,26 @@ fn monitor_serves_a_read_only_page_and_keeps_it_after_the_input() {
     assert_eq!(status["ts"].as_f64(), Some(2.0), "{status}");
     assert!(status["decoder"]["stats"]["tx"].is_u64() && status["decoder"]["keys"].is_array(), "{status}");
 
-    unsafe { libc::kill(child.0.id() as i32, libc::SIGTERM) };
+    #[cfg(unix)]
+    unsafe {
+        libc::kill(child.0.id() as i32, libc::SIGTERM)
+    };
+    #[cfg(windows)] // no signal delivery from tests: the stream assertions above are the point
+    child.0.kill().unwrap();
+    #[cfg(unix)]
     let code = child.wait().code();
+    #[cfg(windows)]
+    child.wait();
     drop(child);
     let stdout = stdout.join().unwrap();
     stderr.1.join().unwrap();
     let err = stderr.0.lock().unwrap().clone();
+    #[cfg(unix)]
     assert_eq!(code, Some(0), "{err}");
     let lines: Vec<Value> = stdout.lines().map(|l| xara_testkit::json::from_str(l).unwrap()).collect();
-    assert_eq!((lines[0]["t"].as_str(), lines.last().unwrap()["t"].as_str()), (Some("start"), Some("summary")));
+    assert_eq!(lines[0]["t"].as_str(), Some("start"), "{stdout}");
+    #[cfg(unix)] // a killed-on-Windows child never flushes the final summary
+    assert_eq!(lines.last().unwrap()["t"].as_str(), Some("summary"));
     assert!(err.contains(&format!("UI http://127.0.0.1:{port}/ (read-only)")) && err.contains("input ended"), "{err}");
 }
 

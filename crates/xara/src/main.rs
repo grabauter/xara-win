@@ -252,6 +252,12 @@ fn config_args(path: &Path) -> Result<Vec<String>, String> {
 }
 
 fn default_config() -> Option<PathBuf> {
+    #[cfg(windows)]
+    let base = std::env::var_os("APPDATA")
+        .filter(|d| !d.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("USERPROFILE").map(|h| PathBuf::from(h).join("AppData").join("Roaming")))?;
+    #[cfg(not(windows))]
     let base = std::env::var_os("XDG_CONFIG_HOME")
         .filter(|d| !d.is_empty())
         .map(PathBuf::from)
@@ -291,14 +297,27 @@ fn state_dir(a: &Args) -> Option<PathBuf> {
 }
 
 fn make_state_dir(d: &Path) -> Result<Option<String>, String> {
-    use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
     let err = |e: std::io::Error| format!("{}: {e}", d.display());
     if !d.exists() {
-        std::fs::DirBuilder::new().recursive(true).mode(0o700).create(d).map_err(err)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::DirBuilderExt;
+            std::fs::DirBuilder::new().recursive(true).mode(0o700).create(d).map_err(err)?;
+        }
+        #[cfg(not(unix))]
+        std::fs::DirBuilder::new().recursive(true).create(d).map_err(err)?;
         return Ok(None);
     }
-    let mode = std::fs::metadata(d).map_err(err)?.permissions().mode();
-    Ok((mode & 0o022 != 0).then(|| format!("{} is writable by other users (mode {:o})", d.display(), mode & 0o777)))
+    #[cfg(unix)]
+    let warn = {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = std::fs::metadata(d).map_err(err)?.permissions().mode();
+        (mode & 0o022 != 0).then(|| format!("{} is writable by other users (mode {:o})", d.display(), mode & 0o777))
+    };
+    // Windows has no POSIX mode bits; AppData state is isolated by the account ACL.
+    #[cfg(not(unix))]
+    let warn = None;
+    Ok(warn)
 }
 
 fn ui_token(a: &Args, dir: Option<&Path>, inherited: Option<String>) -> std::io::Result<Option<String>> {
@@ -579,6 +598,7 @@ fn open_audio(
     }
 }
 
+#[cfg(unix)]
 fn restart(argv: &[String], token: Option<&str>, record_part: Option<u32>) -> ExitCode {
     use std::os::unix::process::CommandExt;
     say!("restarting");
@@ -600,6 +620,33 @@ fn restart(argv: &[String], token: Option<&str>, record_part: Option<u32>) -> Ex
     };
     say!("restart failed: {err}");
     ExitCode::from(EXIT_RESTART_FAILED)
+}
+
+// Windows has no exec(): spawn the replacement and let this process end normally.
+#[cfg(windows)]
+fn restart(argv: &[String], token: Option<&str>, record_part: Option<u32>) -> ExitCode {
+    say!("restarting");
+    let mut c = match std::env::current_exe() {
+        Ok(exe) => std::process::Command::new(exe),
+        Err(e) => {
+            say!("restart failed: {e}");
+            return ExitCode::from(EXIT_RESTART_FAILED);
+        }
+    };
+    if let Some(t) = token {
+        c.env(TOKEN_ENV, t);
+    }
+    if let Some(n) = record_part {
+        c.env(RECORD_PART_ENV, n.to_string());
+    }
+    c.args(argv);
+    match c.spawn() {
+        Ok(_) => std::process::exit(0),
+        Err(e) => {
+            say!("restart failed: {e}");
+            ExitCode::from(EXIT_RESTART_FAILED)
+        }
+    }
 }
 
 fn main() -> ExitCode {
@@ -666,7 +713,10 @@ fn real_main() -> Result<ExitCode, String> {
         say!("{e}");
     }
     let stop = Arc::new(AtomicBool::new(false));
+    #[cfg(not(windows))]
     let sigs = [libc::SIGINT, libc::SIGTERM, libc::SIGHUP, libc::SIGQUIT];
+    #[cfg(windows)]
+    let sigs = [libc::SIGINT, libc::SIGTERM]; // the Windows trap handles Ctrl+C/Break/Close; these numbers are unused
     let signaled = signals::trap(&sigs, stop.clone(), || {
         xara::ptt::wait_released(SECOND_SIGNAL_GRACE);
     })
@@ -837,6 +887,7 @@ mod tests {
         assert_eq!(with_config(&argv("--config /nonexistent/xara.conf -h")), Ok((None, argv("-h"))));
     }
 
+    #[cfg(unix)] // POSIX mode bits; Windows ACLs are not modelled here
     #[test]
     fn state_dir_is_created_private_and_a_shared_one_warned_about() {
         use std::os::unix::fs::PermissionsExt;
