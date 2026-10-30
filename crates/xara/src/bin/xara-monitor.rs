@@ -1,4 +1,5 @@
 use std::io::{self, Read, Write};
+use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -42,14 +43,14 @@ struct Args {
     mon: MonitorOpts,
     json: bool,
     ui: UiArgs,
+    log: Option<PathBuf>,
 }
 
 fn parse() -> Result<Option<Args>, String> {
     let (mut input, mut bw, mut calls, mut names) = (None, Bandwidth::Hz2300, Vec::new(), Vec::new());
     let mut audio = None;
     let (mut blind, mut dump, mut verbose, mut key_idle) = (true, false, false, xara::monitor::KEY_IDLE_S);
-    let mut json = false;
-    let mut list_audio = false;
+    let (mut json, mut log, mut list_audio) = (false, None, false);
     let mut ui = UiArgs::default();
     let mut it = std::env::args().skip(1);
     while let Some(k) = it.next() {
@@ -92,6 +93,7 @@ fn parse() -> Result<Option<Args>, String> {
             "--verbose" => verbose = true,
             "--json" => json = true,
             "--list-audio" => list_audio = true,
+            "--log" => log = Some(PathBuf::from(v()?)),
             _ => return Err(format!("unknown option {k}")),
         }
     }
@@ -107,7 +109,7 @@ fn parse() -> Result<Option<Args>, String> {
         return Err("--ui-addr and --ui-host need --ui-port".into());
     }
     let mon = MonitorOpts { calls, names, blind, key_idle, dump, verbose };
-    Ok(Some(Args { input, audio, bw, mon, json, ui }))
+    Ok(Some(Args { input, audio, bw, mon, json, ui, log }))
 }
 
 fn utc(t: f64) -> String {
@@ -126,6 +128,12 @@ fn drain(m: &mut Monitor, out: Out, ui: &mut Option<(Arc<Shared>, Heard)>) -> st
     while let Some(l) = m.pop() {
         if let Some((s, h)) = ui {
             s.line(&l, h);
+        }
+        if xara::log::to_file() {
+            match out.epoch {
+                Some(e) => xara::log::line(false, format_args!("{} {}", utc(e + l.t), l.text)),
+                None => xara::log::line(false, format_args!("{:9.3} {}", l.t, l.text)),
+            }
         }
         match (out.json, out.epoch) {
             (true, e) => writeln!(o, "{}", l.rec.json(l.t, e.map(|e| e + l.t), &l.text))?,
@@ -254,13 +262,16 @@ fn pipe(
 
 fn run(a: Args, stop: &Arc<AtomicBool>) -> std::io::Result<()> {
     let m = Monitor::new(a.bw, &a.mon);
-    eprintln!(
-        "xara-monitor {}: {} Hz, {} configured calls, {} names, blind {}",
-        env!("CARGO_PKG_VERSION"),
-        a.bw.hz(),
-        a.mon.calls.len(),
-        a.mon.names.len(),
-        if a.mon.blind { "on" } else { "off" }
+    xara::log::line(
+        true,
+        format_args!(
+            "xara-monitor {}: {} Hz, {} configured calls, {} names, blind {}",
+            env!("CARGO_PKG_VERSION"),
+            a.bw.hz(),
+            a.mon.calls.len(),
+            a.mon.names.len(),
+            if a.mon.blind { "on" } else { "off" }
+        ),
     );
     match &a.input {
         Input::Wav(path) => {
@@ -334,6 +345,12 @@ fn main() -> ExitCode {
         Ok(a) => a,
         Err(c) => return c,
     };
+    if let Some(p) = &a.log {
+        if let Err(e) = xara::log::open(p) {
+            say!("--log {}: {e}", p.display());
+            return ExitCode::FAILURE;
+        }
+    }
     let stop = Arc::new(AtomicBool::new(false));
     let _ = signals::trap(&[libc::SIGINT, libc::SIGTERM], stop.clone(), || {});
     match run(a, &stop) {

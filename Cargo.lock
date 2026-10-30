@@ -1064,7 +1064,7 @@ dependencies = [
 
 [[package]]
 name = "xara"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "alsa-sys",
  "cpal",
@@ -1078,7 +1078,7 @@ dependencies = [
 
 [[package]]
 name = "xara-arq"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "miniz_oxide",
  "xara-host",
@@ -1088,7 +1088,7 @@ dependencies = [
 
 [[package]]
 name = "xara-host"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "socket2",
  "xara-testkit",
@@ -1096,7 +1096,7 @@ dependencies = [
 
 [[package]]
 name = "xara-phy"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "num-complex",
  "rustfft",
@@ -1105,11 +1105,11 @@ dependencies = [
 
 [[package]]
 name = "xara-testkit"
-version = "0.1.1"
+version = "0.1.2"
 
 [[package]]
 name = "xara-ui"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "rustfft",
  "xara-arq",

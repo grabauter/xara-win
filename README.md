@@ -53,6 +53,7 @@ in the web UI's audio settings or Windows Sound settings.
                             audio backend (wasapi is the windows one)
     --capture SOURCE        audio source
     --playback SINK         audio sink
+    --tx-buffer-ms N        TX audio queue, raise on underruns (30-500, default 40)
 
     --hf 500|2300|2750      HF mode, bandwidth setting
     --fm narrow|wide        FM mode, narrow vs wide
@@ -77,6 +78,7 @@ in the web UI's audio settings or Windows Sound settings.
 
     --digi CALL             FM digipeat for CALL (default: off)
     --record PATH           record rx, tx and PTT to FLAC (or WAV if .wav)
+    --log FILE              append UTC-timestamped output to FILE
     --quiet                 no output
     --list-audio            print audio devices for the backend and exit
     --version and --help    guess
@@ -143,6 +145,7 @@ options:
     --verbose               report unconfirmed blind detections
     --list-audio            print capture devices for the backend and exit
     --json                  print newline-delimited JSON records
+    --log FILE              append UTC-timestamped output to FILE
     --version and --help    guess
 
 ## registered mode

@@ -5,13 +5,14 @@
 //! modem loop's read and write do the deadline-bounded waiting, mirroring the pulse backend.
 use std::io;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicI16, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicI16, AtomicU64, AtomicUsize, Ordering};
 use std::time::Instant;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{InputCallbackInfo, OutputCallbackInfo, SampleFormat, StreamError, SupportedStreamConfigRange};
 
-use super::{Audio, DeviceList, RATE, STALL};
+use super::ratematch::{Queue, TxBuffer};
+use super::{Audio, DeviceList, IO_TIMEOUT, RATE};
 
 /// Lock-free fixed-capacity single-producer single-consumer ring of i16 samples.
 /// head and tail grow monotonically (never wrapped) so head - tail is always the exact
@@ -33,6 +34,11 @@ impl Spsc {
             tail: AtomicUsize::new(0),
             cap,
         }
+    }
+
+    /// Samples currently buffered; the rate matcher's queue depth.
+    fn fill(&self) -> usize {
+        self.head.load(Ordering::Acquire) - self.tail.load(Ordering::Relaxed)
     }
 
     /// Non-blocking: push as many samples as fit, return how many were written.
@@ -79,8 +85,9 @@ const RING_SAMPLES: usize = 4096; // ~85 ms at 48 kHz, comfortably above one BLO
 pub struct WasapiIo {
     in_stream: Option<cpal::Stream>,
     out_stream: Option<cpal::Stream>,
-    cap: Arc<Spsc>,  // capture: the cpal thread pushes, read() pops
-    play: Arc<Spsc>, // playback: write() pushes, the cpal thread pops
+    cap: Arc<Spsc>,            // capture: the cpal thread pushes, read() pops
+    play: Arc<Spsc>,           // playback: write() pushes, the cpal thread pops
+    underruns: Arc<AtomicU64>, // output callbacks that found the ring dry after it had data
 }
 
 fn q16(s: f32) -> i16 {
@@ -185,19 +192,23 @@ fn open_in(dev: &cpal::Device, cap: &Arc<Spsc>) -> io::Result<cpal::Stream> {
     Ok(stream)
 }
 
-fn open_out(dev: &cpal::Device, play: &Arc<Spsc>) -> io::Result<cpal::Stream> {
+fn open_out(dev: &cpal::Device, play: &Arc<Spsc>, underruns: &Arc<AtomicU64>) -> io::Result<cpal::Stream> {
     let cfgs = dev.supported_output_configs().map_err(|e| io::Error::other(format!("wasapi playback formats: {e}")))?;
     let (cfg, ch, fmt) = select_config(cfgs, "playback")?;
     let stream = match fmt {
         SampleFormat::I16 => {
-            let (play, mut buf) = (play.clone(), Vec::with_capacity(RING_SAMPLES));
+            let (play, underruns, mut buf) = (play.clone(), underruns.clone(), Vec::with_capacity(RING_SAMPLES));
             dev.build_output_stream(
                 &cfg,
                 move |data: &mut [i16], _: &OutputCallbackInfo| {
                     let frames = data.len() / ch;
                     buf.clear();
                     buf.resize(frames, 0);
-                    let _ = play.try_pop(&mut buf); // anything missing stays silence
+                    let have = play.fill();
+                    let n = play.try_pop(&mut buf); // anything missing stays silence
+                    if have > 0 && n < frames {
+                        underruns.fetch_add(1, Ordering::Relaxed); // the ring had data but ran dry
+                    }
                     for (i, f) in data.chunks_exact_mut(ch).enumerate() {
                         f.fill(buf[i]); // mono to every channel
                     }
@@ -207,14 +218,18 @@ fn open_out(dev: &cpal::Device, play: &Arc<Spsc>) -> io::Result<cpal::Stream> {
             )
         }
         _ => {
-            let (play, mut buf) = (play.clone(), Vec::with_capacity(RING_SAMPLES));
+            let (play, underruns, mut buf) = (play.clone(), underruns.clone(), Vec::with_capacity(RING_SAMPLES));
             dev.build_output_stream(
                 &cfg,
                 move |data: &mut [f32], _: &OutputCallbackInfo| {
                     let frames = data.len() / ch;
                     buf.clear();
                     buf.resize(frames, 0);
-                    let _ = play.try_pop(&mut buf);
+                    let have = play.fill();
+                    let n = play.try_pop(&mut buf);
+                    if have > 0 && n < frames {
+                        underruns.fetch_add(1, Ordering::Relaxed);
+                    }
                     for (i, f) in data.chunks_exact_mut(ch).enumerate() {
                         f.fill(buf[i] as f32 / 32768.0);
                     }
@@ -230,20 +245,28 @@ fn open_out(dev: &cpal::Device, play: &Arc<Spsc>) -> io::Result<cpal::Stream> {
 }
 
 impl WasapiIo {
-    pub fn open(capture: &str, playback: &str, radio: bool) -> io::Result<Self> {
+    pub fn open(capture: &str, playback: &str, radio: bool, tx: TxBuffer) -> io::Result<Self> {
         check(playback, radio)?;
         let host = cpal::default_host();
-        let (cap, play) = (Arc::new(Spsc::new(RING_SAMPLES)), Arc::new(Spsc::new(RING_SAMPLES)));
+        // the play ring must be able to hold the whole rate-matcher TX buffer
+        let (cap, play) = (Arc::new(Spsc::new(RING_SAMPLES)), Arc::new(Spsc::new(RING_SAMPLES.max(tx.capacity()))));
+        let underruns = Arc::new(AtomicU64::new(0));
         let in_stream = open_in(&find(&host, capture, true)?, &cap)?;
-        let out_stream = open_out(&find(&host, playback, false)?, &play)?;
-        Ok(Self { in_stream: Some(in_stream), out_stream: Some(out_stream), cap, play })
+        let out_stream = open_out(&find(&host, playback, false)?, &play, &underruns)?;
+        Ok(Self { in_stream: Some(in_stream), out_stream: Some(out_stream), cap, play, underruns })
     }
 
     pub fn open_capture(capture: &str) -> io::Result<Self> {
         let host = cpal::default_host();
         let cap = Arc::new(Spsc::new(RING_SAMPLES));
         let in_stream = open_in(&find(&host, capture, true)?, &cap)?;
-        Ok(Self { in_stream: Some(in_stream), out_stream: None, cap, play: Arc::new(Spsc::new(RING_SAMPLES)) })
+        Ok(Self {
+            in_stream: Some(in_stream),
+            out_stream: None,
+            cap,
+            play: Arc::new(Spsc::new(RING_SAMPLES)),
+            underruns: Arc::new(AtomicU64::new(0)),
+        })
     }
 }
 
@@ -252,7 +275,7 @@ impl Audio for WasapiIo {
         if self.in_stream.is_none() {
             return Err(io::Error::other("wasapi: stream opened without capture"));
         }
-        let until = Instant::now() + STALL;
+        let until = Instant::now() + IO_TIMEOUT;
         let mut off = 0;
         while off < x.len() {
             off += self.cap.try_pop(&mut x[off..]);
@@ -270,7 +293,7 @@ impl Audio for WasapiIo {
         if self.out_stream.is_none() {
             return Err(super::capture_only());
         }
-        let until = Instant::now() + STALL;
+        let until = Instant::now() + IO_TIMEOUT;
         let mut off = 0;
         while off < x.len() {
             off += self.play.try_push(&x[off..]);
@@ -282,6 +305,19 @@ impl Audio for WasapiIo {
             }
         }
         Ok(())
+    }
+
+    // cpal gives no endpoint-delay query, so frames is what our ring holds; floor stays 0
+    // and underruns are counted by the output callback itself.
+    fn queued(&mut self) -> io::Result<Option<Queue>> {
+        if self.out_stream.is_none() {
+            return Err(super::capture_only());
+        }
+        Ok(Some(Queue { frames: self.play.fill(), floor: 0, underruns: self.underruns.load(Ordering::Relaxed) }))
+    }
+
+    fn backlog(&mut self) -> io::Result<Option<usize>> {
+        Ok(Some(self.cap.fill()))
     }
 }
 

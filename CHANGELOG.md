@@ -1,5 +1,6 @@
 # Changelog
 
+<<<<<<< HEAD
 ## Unreleased
 
 windows support
@@ -9,6 +10,13 @@ windows support
 - PTT on Windows: RTS/DTR on COM ports and rigctld (CM108 hidraw stays Linux-only)
 - `--list-audio` on both binaries prints the device names for the chosen backend
 - Ctrl+C and console close stop xara cleanly and release PTT, like SIGINT on Linux
+=======
+## 0.1.2
+
+- `--log` produces timestamped log files
+- new audio resampling and buffering path
+- bugfix: call signs with SSID are encoded properly
+>>>>>>> origin/main
 
 ## 0.1.1
 
