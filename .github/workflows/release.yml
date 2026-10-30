@@ -23,7 +23,7 @@ jobs:
           - { target: aarch64-unknown-linux-gnu, runner: ubuntu-24.04-arm }
           - { target: armv7-unknown-linux-gnueabihf, runner: ubuntu-24.04, cross: armhf, cc: arm-linux-gnueabihf }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: deps
         shell: bash
         run: |
@@ -49,7 +49,7 @@ jobs:
             sh -s -- -y --profile minimal --default-toolchain stable --target '${{ matrix.target }}'
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
       - run: scripts/release_bins.sh '${{ matrix.target }}'
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: bins-${{ matrix.target }}
           path: target/dist/*.tar.xz
@@ -61,12 +61,12 @@ jobs:
       matrix:
         target: [x86_64-pc-windows-msvc]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
       - run: pwsh scripts/release_bins_win.ps1 -Target '${{ matrix.target }}'
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: bins-${{ matrix.target }}
           path: target/dist/*.zip
@@ -75,14 +75,14 @@ jobs:
   source:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: tag matches version
         run: |
           ver=$(sed -n 's/^version = "\(.*\)"$/\1/p;T;q' Cargo.toml)
           test "${GITHUB_REF_NAME#v}" = "$ver"
       - run: cargo fetch --locked
       - run: scripts/release_tarball.sh HEAD
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: source
           path: target/dist/*.tar.xz
@@ -96,13 +96,13 @@ jobs:
       id-token: write
       attestations: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
           path: out
           merge-multiple: true
       - run: cd out && sha256sum -- * > SHA256SUMS
-      - uses: actions/attest-build-provenance@v2
+      - uses: actions/attest-build-provenance@v4
         with:
           subject-path: out/*
       - name: draft release
