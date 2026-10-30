@@ -15,17 +15,23 @@ xara-arq.workspace = true
 xara-host.workspace = true
 xara-ui.workspace = true
 libc.workspace = true
-alsa-sys = { workspace = true, optional = true }
-cpal = { workspace = true, optional = true }
+
+[target.'cfg(unix)'.dependencies]
+alsa-sys.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+cpal.workspace = true
 
 [dev-dependencies]
 xara-testkit.workspace = true
 
 [features]
-default = ["pulse", "alsa"]
+# every backend names a platform's audio API; features gate intent, cfg gates platform,
+# so the same default feature set builds cleanly on Linux and Windows
+default = ["pulse", "alsa", "wasapi"]
 pulse = []
-alsa = ["dep:alsa-sys"]
-wasapi = ["dep:cpal"]
+alsa = []
+wasapi = []
 registered = []
 fixed-turbo = ["xara-phy/fixed-turbo"]
 float-turbo = ["xara-phy/float-turbo"]

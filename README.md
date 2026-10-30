@@ -36,9 +36,9 @@ alternatively for a local setup you can do:
     cargo build --release
     cargo test
 
-on windows, build the wasapi backend instead (needs no extra libraries):
+on windows, the default build uses the WASAPI backend (needs no extra libraries):
 
-    cargo build --release --no-default-features --features wasapi
+    cargo build --release
 
 windows audio devices are named as Windows names them: find the exact name
 in the web UI's audio settings or Windows Sound settings.

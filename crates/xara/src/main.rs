@@ -982,7 +982,7 @@ mod tests {
         let a = build(&argv("--list-audio"), &Pairs::new()).unwrap();
         assert!(a.list_audio && a.call.is_empty() && a.capture.is_empty());
         assert!(build(&argv("--list-audio --audio bogus"), &Pairs::new()).is_err_and(|e| e.contains("--audio")));
-        let want = if cfg!(feature = "pulse") { "pulse" } else { "wasapi" };
+        let want = if cfg!(all(feature = "pulse", unix)) { "pulse" } else { "wasapi" };
         assert_eq!(build(&argv(&format!("--list-audio --audio {want}")), &Pairs::new()).unwrap().audio.name(), want);
     }
 
@@ -1116,7 +1116,7 @@ mod tests {
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
-    #[cfg(feature = "alsa")]
+    #[cfg(all(feature = "alsa", unix))]
     #[test]
     fn a_save_is_refused_when_startup_would_refuse_its_playback() {
         let null = argv("--call N2CALL --audio alsa --capture null --playback null");
@@ -1130,7 +1130,7 @@ mod tests {
         assert_eq!(validate(&kv(&[("capture", "hw:1,0")])), Ok(()));
     }
 
-    #[cfg(feature = "alsa")]
+    #[cfg(all(feature = "alsa", unix))]
     #[test]
     fn a_refused_saved_device_keeps_the_other_saved_values() {
         let null = argv("--call N2CALL --audio alsa --capture null --playback null --drive-db -5");

@@ -321,7 +321,7 @@ fn radio_mode_needs_explicit_opt_in() {
     assert!(e.contains("--port must be below 65535"), "{e}");
 }
 
-#[cfg(feature = "pulse")]
+#[cfg(all(feature = "pulse", unix))]
 #[test]
 fn radio_mode_refuses_a_default_sink_before_contacting_the_sound_server() {
     for sink in ["@DEFAULT_SINK@", "default"] {

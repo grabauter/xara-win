@@ -1,15 +1,28 @@
-#[cfg(feature = "alsa")]
+#[cfg(all(feature = "alsa", unix))]
 pub mod alsa;
-#[cfg(feature = "pulse")]
+#[cfg(all(feature = "pulse", unix))]
 pub mod pulse;
-#[cfg(feature = "pulse")]
+#[cfg(all(feature = "pulse", unix))]
 mod pulse_ffi;
 pub mod ratematch;
-#[cfg(feature = "wasapi")]
+#[cfg(all(feature = "wasapi", windows))]
 pub mod wasapi;
 
-#[cfg(not(any(feature = "pulse", feature = "alsa", feature = "wasapi")))]
-compile_error!("xara needs an audio backend: enable the pulse, alsa, or wasapi feature");
+// a backend is real only when both its feature is on and the platform provides the library
+macro_rules! have {
+    (pulse) => {
+        cfg!(all(feature = "pulse", unix))
+    };
+    (alsa) => {
+        cfg!(all(feature = "alsa", unix))
+    };
+    (wasapi) => {
+        cfg!(all(feature = "wasapi", windows))
+    };
+}
+
+#[cfg(not(any(all(feature = "pulse", unix), all(feature = "alsa", unix), all(feature = "wasapi", windows))))]
+compile_error!("xara has no audio backend on this platform: enable pulse/alsa (unix) or wasapi (windows)");
 
 use std::collections::VecDeque;
 use std::io::{self, Write};
@@ -28,7 +41,7 @@ fn capture_only() -> io::Error {
     io::Error::new(io::ErrorKind::Unsupported, "write to a capture-only audio device")
 }
 
-#[cfg(any(feature = "pulse", feature = "alsa"))]
+#[cfg(any(all(feature = "pulse", unix), all(feature = "alsa", unix)))]
 fn remaining(until: std::time::Instant, what: &str) -> io::Result<Duration> {
     until
         .checked_duration_since(std::time::Instant::now())
@@ -131,9 +144,9 @@ pub enum Backend {
 
 impl Default for Backend {
     fn default() -> Self {
-        if cfg!(feature = "pulse") {
+        if have!(pulse) {
             Self::Pulse
-        } else if cfg!(feature = "wasapi") {
+        } else if have!(wasapi) {
             Self::Wasapi
         } else {
             Self::Alsa
@@ -151,16 +164,16 @@ impl std::str::FromStr for Backend {
             "wasapi" => Self::Wasapi,
             _ => return Err(format!("--audio {s:?}: expected pulse, alsa or wasapi")),
         };
-        if b.built() { Ok(b) } else { Err(format!("--audio {s}: this xara was built without the {s} feature")) }
+        if b.built() { Ok(b) } else { Err(format!("--audio {s}: not available in this build (platform or feature)")) }
     }
 }
 
 impl Backend {
     pub fn built(self) -> bool {
         match self {
-            Self::Pulse => cfg!(feature = "pulse"),
-            Self::Alsa => cfg!(feature = "alsa"),
-            Self::Wasapi => cfg!(feature = "wasapi"),
+            Self::Pulse => have!(pulse),
+            Self::Alsa => have!(alsa),
+            Self::Wasapi => have!(wasapi),
         }
     }
 
@@ -173,59 +186,59 @@ impl Backend {
     }
 }
 
-#[cfg(not(all(feature = "pulse", feature = "alsa", feature = "wasapi")))]
+#[cfg(not(all(all(feature = "pulse", unix), all(feature = "alsa", unix), all(feature = "wasapi", windows))))]
 fn unbuilt(b: Backend) -> io::Error {
-    io::Error::other(format!("this xara was built without the {} feature", b.name()))
+    io::Error::other(format!("the {} audio backend is not available in this build", b.name()))
 }
 
 pub fn open(b: Backend, capture: &str, playback: &str, radio: bool, tx: TxBuffer) -> io::Result<Box<dyn Audio>> {
     match b {
-        #[cfg(feature = "pulse")]
+        #[cfg(all(feature = "pulse", unix))]
         Backend::Pulse => Ok(Box::new(pulse::PulseIo::open(capture, playback, radio, tx)?)),
-        #[cfg(feature = "alsa")]
+        #[cfg(all(feature = "alsa", unix))]
         Backend::Alsa => Ok(Box::new(alsa::AlsaIo::open(capture, playback, radio, tx)?)),
-        #[cfg(feature = "wasapi")]
+        #[cfg(all(feature = "wasapi", windows))]
         Backend::Wasapi => Ok(Box::new(wasapi::WasapiIo::open(capture, playback, radio, tx)?)),
-        #[cfg(not(all(feature = "pulse", feature = "alsa", feature = "wasapi")))]
+        #[cfg(not(all(all(feature = "pulse", unix), all(feature = "alsa", unix), all(feature = "wasapi", windows))))]
         _ => Err(unbuilt(b)),
     }
 }
 
 pub fn check_playback(b: Backend, playback: &str, radio: bool) -> io::Result<()> {
     match b {
-        #[cfg(feature = "pulse")]
+        #[cfg(all(feature = "pulse", unix))]
         Backend::Pulse => pulse::check(playback, radio),
-        #[cfg(feature = "alsa")]
+        #[cfg(all(feature = "alsa", unix))]
         Backend::Alsa => alsa::resolve_playback(playback, radio).map(drop),
-        #[cfg(feature = "wasapi")]
+        #[cfg(all(feature = "wasapi", windows))]
         Backend::Wasapi => wasapi::check(playback, radio),
-        #[cfg(not(all(feature = "pulse", feature = "alsa", feature = "wasapi")))]
+        #[cfg(not(all(all(feature = "pulse", unix), all(feature = "alsa", unix), all(feature = "wasapi", windows))))]
         _ => Err(unbuilt(b)),
     }
 }
 
 pub fn list(b: Backend) -> io::Result<(DeviceList, DeviceList)> {
     match b {
-        #[cfg(feature = "pulse")]
+        #[cfg(all(feature = "pulse", unix))]
         Backend::Pulse => pulse::list(),
-        #[cfg(feature = "alsa")]
+        #[cfg(all(feature = "alsa", unix))]
         Backend::Alsa => alsa::list(),
-        #[cfg(feature = "wasapi")]
+        #[cfg(all(feature = "wasapi", windows))]
         Backend::Wasapi => wasapi::list(),
-        #[cfg(not(all(feature = "pulse", feature = "alsa", feature = "wasapi")))]
+        #[cfg(not(all(all(feature = "pulse", unix), all(feature = "alsa", unix), all(feature = "wasapi", windows))))]
         _ => Err(unbuilt(b)),
     }
 }
 
 pub fn open_capture(b: Backend, capture: &str) -> io::Result<Box<dyn Audio>> {
     match b {
-        #[cfg(feature = "pulse")]
+        #[cfg(all(feature = "pulse", unix))]
         Backend::Pulse => Ok(Box::new(pulse::PulseIo::open_capture(capture)?)),
-        #[cfg(feature = "alsa")]
+        #[cfg(all(feature = "alsa", unix))]
         Backend::Alsa => Ok(Box::new(alsa::AlsaIo::open_capture(capture)?)),
-        #[cfg(feature = "wasapi")]
+        #[cfg(all(feature = "wasapi", windows))]
         Backend::Wasapi => Ok(Box::new(wasapi::WasapiIo::open_capture(capture)?)),
-        #[cfg(not(all(feature = "pulse", feature = "alsa", feature = "wasapi")))]
+        #[cfg(not(all(all(feature = "pulse", unix), all(feature = "alsa", unix), all(feature = "wasapi", windows))))]
         _ => Err(unbuilt(b)),
     }
 }

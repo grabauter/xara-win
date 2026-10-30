@@ -1,4 +1,4 @@
-#![cfg(feature = "alsa")]
+#![cfg(all(feature = "alsa", unix))]
 
 use xara::audio::alsa::{Route, check_device, resolve_playback};
 

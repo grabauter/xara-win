@@ -6,6 +6,8 @@
 windows support
 
 - xara and xara-monitor build and run on Windows (x86_64 MSVC)
+- one default feature set everywhere: `cargo build` now works on Linux and
+  Windows; platform-foreign audio backends drop out of the build on their own
 - WASAPI audio backend (`--audio wasapi`); devices are Windows device names
 - PTT on Windows: RTS/DTR on COM ports and rigctld (CM108 hidraw stays Linux-only)
 - `--list-audio` on both binaries prints the device names for the chosen backend
