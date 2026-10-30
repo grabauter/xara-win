@@ -30,8 +30,8 @@ jobs:
         with:
           components: rustfmt,clippy
       - run: cargo +stable fmt --all --check
-      - run: cargo +stable clippy --locked --workspace --all-targets -- -D warnings
-      - run: cargo +stable test --locked --release --workspace
+      - run: cargo +stable clippy --locked --workspace --all-targets --features getrandom -- -D warnings
+      - run: cargo +stable test --locked --release --workspace --features getrandom
 
   msrv:
     runs-on: ubuntu-24.04

@@ -98,7 +98,9 @@ Release packaging: GitHub Actions builds `xara-<ver>-x86_64-pc-windows-msvc.zip`
 from `scripts/release_bins_win.ps1` alongside the Linux tarballs, with
 the same SHA256SUMS and provenance attestation. The zip contains
 `xara.exe`, `xara-monitor.exe`, LICENSE and README; it needs no runtime
-DLLs beyond stock Windows.
+DLLs beyond stock Windows. The release (and CI) build adds
+`--features getrandom`: the web UI token is then drawn from the `rand`
+crate, because Windows has no `/dev/urandom` for the default code path.
 
 ## what changed in the code (for the curious)
 

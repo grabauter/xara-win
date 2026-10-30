@@ -8,7 +8,7 @@ $root = Split-Path -Parent (Split-Path -Parent $PSCommandPath)
 if (-not $OutDir) { $OutDir = Join-Path $root "target\dist" }
 $ver = (Select-String -Path (Join-Path $root "Cargo.toml") -Pattern '^version = "([^"]+)"' | Select-Object -First 1).Matches[0].Groups[1].Value
 $name = "xara-$ver-$Target"
-cargo build --locked --release --target $Target -p xara
+cargo build --locked --release --target $Target -p xara --features getrandom
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 $rel = Join-Path $root "target\$Target\release"
 New-Item -ItemType Directory -Force $OutDir | Out-Null

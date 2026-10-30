@@ -380,8 +380,10 @@ mod tests {
         let producer = std::thread::spawn(move || {
             let mut sent = 0;
             for i in 0..10_000u32 {
-                sent += prod.try_push(&[i as i16]);
-                std::thread::yield_now();
+                while prod.try_push(&[i as i16]) == 0 {
+                    std::thread::yield_now(); // wait for room; no sample may be skipped
+                }
+                sent += 1;
             }
             wdone.store(true, Ordering::Release); // after this the fill level can only shrink
             sent

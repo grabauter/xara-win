@@ -224,6 +224,14 @@ fn serve(
     Ok(UiServer { addr: local })
 }
 
+#[cfg(feature = "getrandom")]
+pub fn new_token() -> io::Result<String> {
+    let mut b = [0u8; 16];
+    rand::fill(&mut b); // CSPRNG (OS-seeded); panics only if the OS entropy source fails
+    Ok(b.iter().map(|x| format!("{x:02x}")).collect())
+}
+
+#[cfg(not(feature = "getrandom"))]
 pub fn new_token() -> io::Result<String> {
     let mut b = [0u8; 16];
     std::fs::File::open("/dev/urandom")?.read_exact(&mut b)?;

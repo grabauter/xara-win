@@ -40,6 +40,10 @@ on windows, the default build uses the WASAPI backend (needs no extra libraries)
 
     cargo build --release
 
+add `--features getrandom` on windows to pull the UI token randomness from
+the rand crate instead of /dev/urandom (which windows lacks); the windows CI
+job and the release packaging both build that way.
+
 windows audio devices are named as Windows names them: find the exact name
 in the web UI's audio settings or Windows Sound settings.
 
