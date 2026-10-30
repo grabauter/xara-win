@@ -92,7 +92,14 @@ TX drive in dB, at most 0 (default \-5).
 \f[B]\-\-quiet\f[R]
 No trace output.
 .TP
-\f[B]\-\-ui\-port\f[R] \f[I]N\f[R]
+\&\f[B]\-\-list\-audio\f[R]
+Print the capture and playback device names for the selected
+\f[B]\-\-audio\f[R] backend, one per line, and exit without starting the
+modem.
+On Windows these are the names to give \f[B]\-\-capture\f[R] and
+\f[B]\-\-playback\f[R].
+.TP
+\&\f[B]\-\-ui\-port\f[R] \f[I]N\f[R]
 Serve the web UI on port \f[I]N\f[R]: with bonus data at
 \f[B]/stream\f[R].
 Off by default.

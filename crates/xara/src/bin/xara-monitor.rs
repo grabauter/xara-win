@@ -49,6 +49,7 @@ fn parse() -> Result<Option<Args>, String> {
     let mut audio = None;
     let (mut blind, mut dump, mut verbose, mut key_idle) = (true, false, false, xara::monitor::KEY_IDLE_S);
     let mut json = false;
+    let mut list_audio = false;
     let mut ui = UiArgs::default();
     let mut it = std::env::args().skip(1);
     while let Some(k) = it.next() {
@@ -90,8 +91,13 @@ fn parse() -> Result<Option<Args>, String> {
             "--dump" => dump = true,
             "--verbose" => verbose = true,
             "--json" => json = true,
+            "--list-audio" => list_audio = true,
             _ => return Err(format!("unknown option {k}")),
         }
+    }
+    if list_audio {
+        audio::print_devices(audio.unwrap_or_default()).map_err(|e| e.to_string())?;
+        return Ok(None);
     }
     let input = input.ok_or("one of --wav, --stdin, or --capture is required")?;
     if audio.is_some() && !matches!(input, Input::Capture(_)) {

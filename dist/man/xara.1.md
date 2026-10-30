@@ -95,6 +95,12 @@ Pat. See the README for full details.
 
 :   No trace output.
 
+**--list-audio**
+
+:   Print the capture and playback device names for the selected **--audio**
+    backend, one per line, and exit without starting the modem. On Windows
+    these are the names to give **--capture** and **--playback**.
+
 **--ui-port** *N*
 
 :   Serve the web UI on port *N*: with bonus data at **/stream**. Off by default.

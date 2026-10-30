@@ -48,6 +48,7 @@ struct Args {
     addr: String,
     drive_db: f64,
     quiet: bool,
+    list_audio: bool,
     ui: UiArgs,
     ui_control: bool,
     ui_token: Option<String>,
@@ -81,6 +82,7 @@ fn defaults() -> Args {
         addr: xara::DEFAULT_ADDR.into(),
         drive_db: DEFAULT_DRIVE_DB,
         quiet: false,
+        list_audio: false,
         ui: UiArgs::default(),
         ui_control: false,
         ui_token: None,
@@ -132,6 +134,7 @@ fn take(a: &mut Args, k: &str, mut v: impl FnMut() -> Result<String, String>) ->
         "--addr" => a.addr = v()?,
         "--drive-db" => a.drive_db = finite(k, &v()?)?,
         "--quiet" => a.quiet = true,
+        "--list-audio" => a.list_audio = true,
         "--ui-control" => a.ui_control = true,
         "--ui-token" => {
             let t = v()?;
@@ -163,7 +166,14 @@ fn parse(argv: &[String]) -> Result<Option<Args>, String> {
         cli::meta(m, &USAGE);
         return Ok(None);
     }
-    build(argv, &Pairs::new()).map(Some)
+    let a = build(argv, &Pairs::new())?;
+    if a.list_audio {
+        return match audio::print_devices(a.audio) {
+            Ok(()) => Ok(None),
+            Err(e) => Err(e.to_string()),
+        };
+    }
+    Ok(Some(a))
 }
 
 fn build(argv: &[String], saved: &Pairs) -> Result<Args, String> {
@@ -183,6 +193,9 @@ fn build(argv: &[String], saved: &Pairs) -> Result<Args, String> {
 }
 
 fn check(a: &Args) -> Result<(), String> {
+    if a.list_audio {
+        return Ok(()); // --list-audio prints and exits; it needs no station config
+    }
     if a.capture.is_empty() || a.playback.is_empty() {
         return Err("--capture and --playback are required".into());
     }
@@ -811,6 +824,15 @@ mod tests {
         assert_eq!(with_saved(&null, &kv(&[("capture", "-h")]), false).unwrap().capture, "-h");
         assert!(with_saved(&null, &kv(&[("call", "--help")]), false).is_err_and(|e| e.contains("bad call")));
         assert!(with_saved(&argv("--call N2CALL --capture c --playback p -h"), &Pairs::new(), false).is_err());
+    }
+
+    #[test]
+    fn list_audio_needs_no_station_config() {
+        let a = build(&argv("--list-audio"), &Pairs::new()).unwrap();
+        assert!(a.list_audio && a.call.is_empty() && a.capture.is_empty());
+        assert!(build(&argv("--list-audio --audio bogus"), &Pairs::new()).is_err_and(|e| e.contains("--audio")));
+        let want = if cfg!(feature = "pulse") { "pulse" } else { "wasapi" };
+        assert_eq!(build(&argv(&format!("--list-audio --audio {want}")), &Pairs::new()).unwrap().audio.name(), want);
     }
 
     #[test]

@@ -11,7 +11,7 @@ pub mod wasapi;
 compile_error!("xara needs an audio backend: enable the pulse, alsa, or wasapi feature");
 
 use std::collections::VecDeque;
-use std::io;
+use std::io::{self, Write};
 use std::time::Duration;
 
 pub const RATE: u32 = 48000;
@@ -173,6 +173,35 @@ pub fn open_capture(b: Backend, capture: &str) -> io::Result<Box<dyn Audio>> {
         Backend::Wasapi => Ok(Box::new(wasapi::WasapiIo::open_capture(capture)?)),
         #[cfg(not(all(feature = "pulse", feature = "alsa", feature = "wasapi")))]
         _ => Err(unbuilt(b)),
+    }
+}
+
+/// Prints one device per line for --list-audio; names are what --capture/--playback expect.
+pub fn print_devices(b: Backend) -> io::Result<()> {
+    let (capture, playback) = list(b)?;
+    let mut lines = vec![format!("capture devices for backend {}:", b.name())];
+    if capture.is_empty() {
+        lines.push("  (none)".into());
+    }
+    lines.extend(capture.iter().map(|(name, desc)| device_line(name, desc)));
+    lines.push(format!("playback devices for backend {}:", b.name()));
+    if playback.is_empty() {
+        lines.push("  (none)".into());
+    }
+    lines.extend(playback.iter().map(|(name, desc)| device_line(name, desc)));
+    let mut out = io::stdout().lock();
+    for l in lines {
+        if writeln!(out, "{l}").is_err() {
+            break; // a closed pipe (--list-audio | grep) ends the listing, not a crash
+        }
+    }
+    Ok(())
+}
+
+fn device_line(name: &str, desc: &str) -> String {
+    match desc.is_empty() {
+        true => format!("  {name}"),
+        false => format!("  {name}  ({desc})"),
     }
 }
 

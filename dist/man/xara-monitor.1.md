@@ -65,6 +65,12 @@ timestamped details about the observed packets.
 
 :   Report unconfirmed blind detections
 
+**--list-audio**
+
+:   Print the capture device names for the selected **--audio** backend
+    (and the playback ones, for reference), then exit. On Windows these are
+    the names to give **--capture**.
+
 **--json**
 
 :   Print newline-delimited JSON records.

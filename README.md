@@ -78,6 +78,7 @@ in the web UI's audio settings or Windows Sound settings.
     --digi CALL             FM digipeat for CALL (default: off)
     --record PATH           record rx, tx and PTT to FLAC (or WAV if .wav)
     --quiet                 no output
+    --list-audio            print audio devices for the backend and exit
     --version and --help    guess
 
 ## PTT settings
@@ -140,6 +141,7 @@ options:
     --key-idle MIN          max target idle time (default: 30, 0 disables)
     --dump                  dump entire payloads
     --verbose               report unconfirmed blind detections
+    --list-audio            print capture devices for the backend and exit
     --json                  print newline-delimited JSON records
     --version and --help    guess
 
